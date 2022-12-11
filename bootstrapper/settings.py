@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 from pathlib import Path
 import environ
 import os
+from django.core.management import utils
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,7 +39,8 @@ else:
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-==meg&9ef4d0vv0#u@hib2+^=hl_b%2gn%wk690=79%!7o=3^9"
+# I am rotating the secret key because I am not using this for anything
+SECRET_KEY = utils.get_random_secret_key()
 
 ALLOWED_HOSTS = ["localhost", "api.laundrivr.com"]
 
