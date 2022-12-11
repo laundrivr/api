@@ -1,0 +1,6 @@
+// format on save
+{
+  "editor.formatOnSave": true,
+  // python formatting provider
+  "python.formatting.provider": "black"
+}
