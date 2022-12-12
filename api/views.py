@@ -68,8 +68,35 @@ async def payment(request: any) -> HttpResponse:
     # get the order from the response
     order: dict = result.body["order"]
 
-    # get the customer id from the order
-    customer_id: str = order["customer_id"]
+    # we can't get the customer id from the order because
+    # it changes when the payment happens (instant profiles)
+    # https://developer.squareup.com/docs/customers-api/what-it-does#instant-profiles
+
+    # so let's grab the customer id from the supabase database
+    # using the order id
+    customer_id: str = None
+    try:
+        customer_response = (
+            await supabase_client.table("pending_transactions")
+            .select("original_square_customer_id")
+            .eq("square_order_id", order_id)
+            .limit(1)
+            .execute()
+        )
+
+        if len(customer_response["data"]) <= 0:
+            return HttpResponse(
+                "Error getting customer id from the pending transactions database: No customer id found for order id "
+                + order_id
+            )
+
+        customer_id = customer_response["data"][0]["original_square_customer_id"]
+
+    except Exception as e:
+        return HttpResponse(
+            "Error getting customer id from the pending transactions database: "
+            + str(e)
+        )
 
     # get the id of the first line item in the order (the variation id)
     package_id: str = order["line_items"][0]["catalog_object_id"]
