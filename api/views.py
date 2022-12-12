@@ -5,6 +5,13 @@ import json
 from square.client import Client as SquareClient
 from supabase import create_client, Client as SupabaseClient
 import os
+import logging
+from django.conf import settings
+
+fmt = getattr(settings, "LOG_FORMAT", None)
+lvl = getattr(settings, "LOG_LEVEL", logging.ERROR)
+
+logging.basicConfig(format=fmt, level=lvl)
 
 # get the square access token from the environment
 SQUARE_ACCESS_TOKEN = os.environ.get("SQUARE_ACCESS_TOKEN")
@@ -45,7 +52,7 @@ async def payment(request: any) -> HttpResponse:
 
     # if the payload is empty, return an error
     if not payload:
-        return HttpResponse("Payload is empty.")
+        return HttpResponse("Payload is empty.", status=500)
 
     # if the payload doesn't contain the data key, return an error
     if (
@@ -53,7 +60,7 @@ async def payment(request: any) -> HttpResponse:
         or "object" not in payload["data"]
         or "payment" not in payload["data"]["object"]
     ):
-        return HttpResponse("Payload is invalid.")
+        return HttpResponse("Payload is invalid.", status=500)
 
     # get the order id from the payload
     order_id = payload["data"]["object"]["payment"]["order_id"]
@@ -63,7 +70,7 @@ async def payment(request: any) -> HttpResponse:
 
     # if the order had a problem, return an error
     if result.is_error():
-        return HttpResponse("Order not found: " + str(result.errors))
+        return HttpResponse("Order not found: " + str(result.errors), status=500)
 
     # get the order from the response
     order: dict = result.body["order"]
@@ -76,32 +83,81 @@ async def payment(request: any) -> HttpResponse:
     # using the order id
     customer_id: str = None
     try:
+        logging.debug(
+            "Getting customer id from the pending transactions database for order id "
+            + order_id
+        )
+        print(
+            "Getting customer id from the pending transactions database for order id "
+            + order_id
+        )
         customer_response = (
-            await supabase_client.table("pending_transactions")
+            supabase_client.table("pending_transactions")
             .select("original_square_customer_id")
             .eq("square_order_id", order_id)
             .limit(1)
             .execute()
         )
 
-        if len(customer_response["data"]) <= 0:
-            return HttpResponse(
+        if len(customer_response.data) <= 0:
+            logging.error(
                 "Error getting customer id from the pending transactions database: No customer id found for order id "
                 + order_id
             )
+            print(
+                "Error getting customer id from the pending transactions database: No customer id found for order id "
+                + order_id
+            )
+            return HttpResponse(
+                "Error getting customer id from the pending transactions database: No customer id found for order id "
+                + order_id,
+                status=500,
+            )
 
-        customer_id = customer_response["data"][0]["original_square_customer_id"]
+        logging.debug("Customer response: " + str(customer_response))
+        print("Customer response: " + str(customer_response))
 
+        customer_id = customer_response.data[0]["original_square_customer_id"]
+        logging.debug(
+            "Fetched customer id from the pending transactions database: "
+            + str(customer_id)
+        )
+        print(
+            "Fetched customer id from the pending transactions database: "
+            + str(customer_id)
+        )
     except Exception as e:
-        return HttpResponse(
+        logging.error(
             "Error getting customer id from the pending transactions database: "
             + str(e)
+        )
+        print(
+            "Error getting customer id from the pending transactions database: "
+            + str(e)
+        )
+        return HttpResponse(
+            "Error getting customer id from the pending transactions database: "
+            + str(e),
+            status=500,
         )
 
     # get the id of the first line item in the order (the variation id)
     package_id: str = order["line_items"][0]["catalog_object_id"]
 
     response = None
+
+    logging.debug(
+        "Calling supabase function to process payment for customer id "
+        + str(customer_id)
+        + " and package id "
+        + str(package_id)
+    )
+    print(
+        "Calling supabase function to process payment for customer id "
+        + str(customer_id)
+        + " and package id "
+        + str(package_id)
+    )
 
     try:
         # call the supabase function to process the payment
@@ -112,11 +168,13 @@ async def payment(request: any) -> HttpResponse:
             },
         )
     except Exception as e:
-        return HttpResponse("Error processing payment: " + str(e))
+        return HttpResponse("Error processing payment: " + str(e), status=500)
 
     # if the function call had a problem, return an error
     if "error" in response and response["error"] is not None:
-        return HttpResponse("Error processing payment: " + str(response["error"]))
+        return HttpResponse(
+            "Error processing payment: " + str(response["error"]), status=500
+        )
 
     # return a success message
-    return HttpResponse("Payment processed successfully.")
+    return HttpResponse("Payment processed successfully.", status=200)

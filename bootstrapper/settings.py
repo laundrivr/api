@@ -29,8 +29,8 @@ else:
     environ.Env.read_env(env_file=".env.development")
 
 if os.environ.get("ENVIRONMENT") == "production":
-    print("Starting in production mode.")
-    DEBUG = False
+    print("Starting in production mode (debug).")
+    DEBUG = True
 else:
     print("Starting in development mode.")
     DEBUG = True
@@ -83,7 +83,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "bootstrapper.wsgi.application"
-
 
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
